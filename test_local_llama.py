@@ -1,9 +1,10 @@
 import torch
+from awq import AutoAWQForCausalLM
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "hugging-quants/Meta-Llama-3.1-8B-Instruct-GPTQ-INT4"
+model_id = "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(
+model = AutoAWQForCausalLM.from_pretrained(
   model_id,
   torch_dtype=torch.float16,
   low_cpu_mem_usage=True,
@@ -23,4 +24,4 @@ inputs = tokenizer.apply_chat_template(
 ).to("cuda")
 
 outputs = model.generate(**inputs, do_sample=True, max_new_tokens=256)
-print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+print(tokenizer.batch_decode(outputs[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)[0])
