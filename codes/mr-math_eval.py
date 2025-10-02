@@ -2,6 +2,7 @@ import json
 import re
 import argparse
 from sklearn.metrics import roc_curve, auc
+from pprint import pprint
 
 def calculate_f1_score(correct_true_num, total_true_num, total_false_num, correct_false_num):
     precision_positive = correct_true_num / total_true_num
@@ -15,6 +16,30 @@ def calculate_f1_score(correct_true_num, total_true_num, total_false_num, correc
     macro_F1 = (F1_score_positives + F1_score_negatives) / 2
     return macro_F1
 
+def find_common_elements(list_of_sets):
+    """
+    Finds the common elements (intersection) across a list of sets.
+
+    Args:
+        list_of_sets: A list where each element is a set.
+
+    Returns:
+        A set containing the elements common to all input sets.
+        Returns an empty set if the input list is empty or if there are no common elements.
+    """
+    if not list_of_sets:
+        return set()
+
+    # Initialize the common set with the first set in the list
+    common_set = list_of_sets[0].copy()
+
+    # Iterate through the remaining sets and find the intersection
+    for current_set in list_of_sets[1:]:
+        common_set = common_set.intersection(current_set)
+        # Optimization: if common_set becomes empty, no further intersection is needed
+        if not common_set:
+            break
+    return common_set
 
 def get_results_for_invalid_errors():
     test_set_filepath = './dataset/mr-math_invalid_errors.json'
@@ -86,6 +111,8 @@ def get_results_for_invalid_errors():
 
         ### step-level F1 score
 
+    wrong_false_dict = {evaluator_name: dict() for evaluator_name in evaluators}
+
     print('**************invalid errors*********step level**********macro f1 score*******')
     for evaluator_name, score_results in score_dict.items():
         correct_true_num = 0
@@ -133,6 +160,7 @@ def get_results_for_invalid_errors():
                     assert len(scores) == len(test_data['model_output_step_format'])
                     pred = [1 if score > threshold[evaluator_name] else 0 for score in scores]
 
+                step_index = 0
                 for gt_label, pred_label in zip(gt, pred):
                     if gt_label == 1:
                         total_true_num += 1
@@ -142,10 +170,19 @@ def get_results_for_invalid_errors():
                         continue
                     if gt_label == pred_label == 0:
                         correct_false_num += 1
+                    else:
+                        if score_result["id"] not in wrong_false_dict[evaluator_name]:
+                            wrong_false_dict[evaluator_name][score_result["id"]] = []
+                        wrong_false_dict[evaluator_name][score_result["id"]].append(step_index)
                     if gt_label == pred_label == 1:
                         correct_true_num += 1
+                    step_index += 1
         macro_f1_score = calculate_f1_score(correct_true_num, total_true_num, total_false_num, correct_false_num)
         print(f"{evaluator_name}: {format(macro_f1_score, '.3f')}")
+
+    all_wrong_false_cases = [set(wrong_false_cases.keys()) for evaluator_name, wrong_false_cases in wrong_false_dict.items()]
+    common_wrong_false_cases = find_common_elements(all_wrong_false_cases)
+    print("common_wrong_false_cases =", len(common_wrong_false_cases))
 
     ### solution-level AUC
     print('**************invalid errors*********solution level**********AUC*******')
@@ -170,7 +207,7 @@ def get_results_for_invalid_errors():
 
             fpr, tpr, thresholds = roc_curve(target, pred)
             print(f"{evaluator_name}: {format(auc(fpr, tpr), '.3f')}")
-
+    
     ### step-level AUC
     print('**************invalid errors*********step level**********AUC*******')
     for evaluator_name, score_results in score_dict.items():

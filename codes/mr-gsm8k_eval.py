@@ -14,6 +14,30 @@ def calculate_f1_score(correct_true_num, total_true_num, total_false_num, correc
     macro_F1_score = (F1_score_true_positives + F1_score_true_negatives) / 2
     return macro_F1_score
 
+def find_common_elements(list_of_sets):
+    """
+    Finds the common elements (intersection) across a list of sets.
+
+    Args:
+        list_of_sets: A list where each element is a set.
+
+    Returns:
+        A set containing the elements common to all input sets.
+        Returns an empty set if the input list is empty or if there are no common elements.
+    """
+    if not list_of_sets:
+        return set()
+
+    # Initialize the common set with the first set in the list
+    common_set = list_of_sets[0].copy()
+
+    # Iterate through the remaining sets and find the intersection
+    for current_set in list_of_sets[1:]:
+        common_set = common_set.intersection(current_set)
+        # Optimization: if common_set becomes empty, no further intersection is needed
+        if not common_set:
+            break
+    return common_set
 
 def get_results():
     test_set_filepath = './dataset/mr-gsm8k.json'
@@ -101,6 +125,8 @@ def get_results():
 
         ### step-level F1 score
 
+    wrong_false_dict = {evaluator_name: dict() for evaluator_name in evaluator_names}
+
     print('**************invalid errors*********step level**********macro f1 score*******')
     for evaluator_name, score_results in evaluator_scores.items():
         correct_true_num = 0
@@ -111,6 +137,7 @@ def get_results():
             continue
         else:
             for i, j in zip(test_dataset, score_results):
+                example_id = j["uuid"] if "uuid" in j else j["id"]
                 gt = []
                 if i['model_output_solution_correctness'] == 'correct':
                     gt = [1] * len(i['model_output_steps'])
@@ -161,6 +188,7 @@ def get_results():
                     assert len(scores) == len(i['model_output_steps'])
                     pred = [1 if score > evaluator_thresholds[evaluator_name] else 0 for score in scores]
 
+                step_index = 0
                 for gt_label, pred_label in zip(gt, pred):
                     if gt_label == 1:
                         total_true_num += 1
@@ -170,11 +198,24 @@ def get_results():
                         continue
                     if gt_label == pred_label == 0:
                         correct_false_num += 1
+                    elif gt_label == 0:
+                        if example_id not in wrong_false_dict[evaluator_name]:
+                            wrong_false_dict[evaluator_name][example_id] = []
+                        wrong_false_dict[evaluator_name][example_id].append(step_index)
                     if gt_label == pred_label == 1:
                         correct_true_num += 1
+                    step_index += 1
         macro_F1_score_step = calculate_f1_score(correct_true_num, total_true_num, total_false_num,
                                                  correct_false_num)
         print(f"{evaluator_name}: {format(macro_F1_score_step, '.3f')}")
+        print(f"{evaluator_name}: wrong false case = {format(total_false_num-correct_false_num, '.3f')}")
+    
+    # from pprint import pprint
+    # pprint(wrong_false_dict)
+    all_wrong_false_cases = [set(wrong_false_cases.keys()) for evaluator_name, wrong_false_cases in wrong_false_dict.items() if len(wrong_false_cases) > 0]
+    print([len(x) for x in all_wrong_false_cases])
+    common_wrong_false_cases = find_common_elements(all_wrong_false_cases)
+    print("common_wrong_false_cases =", len(common_wrong_false_cases))
 
     ### solution-level AUC
     print('**************invalid errors*********solution level**********AUC*******')
